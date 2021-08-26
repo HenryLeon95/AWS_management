@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS #, cross_origin --for specific routes.
+from datetime import datetime
 import creds as aws
 import db_creds
 import boto3
@@ -105,10 +106,11 @@ def moveFile():
     idArchive = data_request['idArchive']
     nameArchive = data_request['nameArchive']
     typeA = data_request['type']
-    nameFileOrigin = data_request['nameFileOrigin']
-    nameFileDestiny = data_request['nameFileDestiny']
+    # nameFileOrigin = data_request['nameFileOrigin']
+    # nameFileDestiny = data_request['nameFileDestiny']
+    # file_path = nameFileDestiny + "/" + nameArchive + "." + typeA
     idFile = data_request['idFile']
-    file_path = nameFileDestiny + "/" + nameArchive + "." + typeA
+    last_modified = datetime.now()
     status = False
     msg = "File not found"
 
@@ -118,26 +120,41 @@ def moveFile():
         fils = cursor.fetchall()
         db.commit()
         
+        # We check if the file exists
         if len(fils) >= 1:
-            cursor.execute("UPDATE Archive SET aws_path = %s, folder = %s WHERE idArchive = %s;",
-                (file_path, str(idFile), str(idArchive)))
+            cursor.execute("SELECT * FROM Archive WHERE name = %s and type = %s and folder = %s;",
+                (nameArchive, typeA, str(idFile)))
+            fils = cursor.fetchall()
             db.commit()
 
-            client.copy_object(
-                Bucket = bucket,
-                CopySource = bucket + "/" + nameFileOrigin + "/" + nameArchive + "." + typeA,
-                Key = file_path
-            )
+            #We check if the is already a file with that name in the destination folder
+            if len(fils) < 1:
+                cursor.execute("UPDATE Archive SET folder = %s, last_modified = %s WHERE idArchive = %s;",
+                    (str(idFile), last_modified, str(idArchive)))
+                db.commit()
+                ''' #Por si necesitamos mover el archivo físico
+                cursor.execute("UPDATE Archive SET aws_path = %s, folder = %s WHERE idArchive = %s;",
+                    (file_path, str(idFile), str(idArchive)))
+                db.commit()
 
-            client.delete_object(
-                Bucket=bucket,
-                Key=nameFileOrigin + "/" + nameArchive + "." + typeA
-            )
+                client.copy_object(
+                    Bucket = bucket,
+                    CopySource = bucket + "/" + nameFileOrigin + "/" + nameArchive + "." + typeA,
+                    Key = file_path
+                )
 
-            status = True
-            msg = "File moved"
+                client.delete_object(
+                    Bucket=bucket,
+                    Key=nameFileOrigin + "/" + nameArchive + "." + typeA
+                )'''
 
-            return jsonify({'status': status, 'msg': msg})
+                status = True
+                msg = "File moved"
+
+                return jsonify({'status': status, 'msg': msg})
+
+            else:
+                msg = "Error, file already exists"
 
     except:
         msg = "Unable to move the file"
@@ -150,3 +167,7 @@ def moveFile():
 ## It only runs when the file is running and not when it is being imported.
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=4001, debug = True)
+##
+#RUN ON CONSOLE
+#python src/app.py
+##

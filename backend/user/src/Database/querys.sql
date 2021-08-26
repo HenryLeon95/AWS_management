@@ -1,0 +1,4 @@
+SET FOREIGN_KEY_CHECKS=0;
+truncate table Usuario;
+
+SET FOREIGN_KEY_CHECKS=1;
